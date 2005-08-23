@@ -1,4 +1,4 @@
-Iterator::IO version 0.01
+Iterator::IO version 0.02
 =========================
 
 This module provides some file and filesystem iterators.

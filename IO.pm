@@ -8,14 +8,14 @@ Iterator::IO - Filesystem and stream iterators.
 
 =head1 VERSION
 
-This documentation describes version 0.01 of Iterator::IO.pm, August 18, 2005.
+This documentation describes version 0.02 of Iterator::IO.pm, August 23, 2005.
 
 =cut
 
 use strict;
 use warnings;
 package Iterator::IO;
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use base 'Exporter';
 use vars qw/@EXPORT @EXPORT_OK %EXPORT_TAGS/;
@@ -111,10 +111,11 @@ sub idir_walk
 }
 
 # Function name: ifile
-# Synopsis:      $iter = ifile ($filename)
+# Synopsis:      $iter = ifile ($filename, {options});
 # Description:   Returns the lines of a file, one at a time.
 # Created:       07/28/2005 by EJR
 # Parameters:    $filename - File name to open.
+#                \%options - hashref of options
 # Returns:       Iterator
 # Exceptions:    Iterator::X::Parameter_Error
 #                Iterator::X::IO_Error
@@ -124,17 +125,64 @@ sub ifile
     require IO::File;
 
     my $filename  = shift;
-    my $autochomp = shift;
-    my $sep       = @_ ? shift : $/;
 
-    if (defined $autochomp)
+    # Options
+    my ($autochomp, $sep_defined, $separator);
+    $autochomp = 1;    # default
+
+    ################################################################
+    # Backwards-compatibility block.
+    # THIS WILL GO AWAY!
+    #
+    # This parses the old 'chomp' and 'nochomp' and 'sep' arguments.
+    if (@_)
     {
-        Iterator::X::Parameter_Error->throw(q{Invalid "chomp" argument to ifile})
-            if ($autochomp ne 'chomp'  &&  $autochomp ne 'nochomp');
+        if ($_[0] eq 'chomp'  ||  $_[0] eq 'nochomp'  ||  !defined($_[0]))
+        {
+            my $chomp_opt = shift;
+            if (defined $chomp_opt)
+            {
+                Iterator::X::Parameter_Error->throw(q{Invalid "chomp" argument to ifile})
+                    if ($chomp_opt ne 'chomp'  &&  $chomp_opt ne 'nochomp');
+
+                $autochomp = $chomp_opt eq 'chomp';
+            }
+
+            # Separator argument
+            if (@_)
+            {
+                $sep_defined = 1;
+                $separator   = shift;
+            }
+        }
     }
-    else
+    ################################################################
+
+    if (@_)
     {
-        $autochomp = 'chomp';    # default
+        Iterator::X::Parameter_Error->throw
+            (q{Second argument to ifile must be a hashref})
+            if ref $_[0] ne 'HASH';
+
+        Option: while (my ($opt,$val) = each %{$_[0]})
+        {
+            my $lcopt = lc $opt;   # because we're friendly.
+
+            if ($lcopt eq 'chomp')
+            {
+                $autochomp = $val;
+                next Option;
+            }
+            if ($lcopt eq 'rs'  ||  $lcopt eq '$/'  ||  $lcopt eq 'input_record_separator')
+            {
+                $separator   = $val;
+                $sep_defined = 1;
+                next Option;
+            }
+            Iterator::X::OptionError->throw
+                (message => qq{Unknown option: "$opt" in call to ifile},
+                 name    => $opt);
+        }
     }
 
     # Open the file handle.
@@ -147,11 +195,11 @@ sub ifile
     {
         my $line;
 
-        # Get next line (delimited by $sep);
+        # Get next line (delimited by $separator if such is defined);
         {
-            local $/ = $sep;
+            local $/ = $sep_defined? $separator : $/;
             $line = $fh->getline();
-            chomp $line  if defined $line  &&  $autochomp eq 'chomp';
+            chomp $line  if defined $line  &&  $autochomp;
         }
 
         # Done?
@@ -168,10 +216,11 @@ sub ifile
 }
 
 # Function name: ifile_reverse
-# Synopsis:      $iter = ifile_reverse ($filename)
+# Synopsis:      $iter = ifile_reverse ($filename, {options})
 # Description:   Returns the lines of a file, in reverse order
 # Created:       07/28/2005 by EJR
 # Parameters:    $filename - File name to open.
+#                \%options - options: chomp => bool, $/ => string
 # Returns:       Iterator
 # Exceptions:    Iterator::X::Parameter_Error
 #                Iterator::X::IO_Error
@@ -181,26 +230,72 @@ sub ifile_reverse
     require IO::File;
 
     my $filename  = shift;
-    my $autochomp = shift;
-    my $sep  = @_? shift : $/;
 
-    if (defined $autochomp)
+    # Options
+    my ($autochomp, $sep_defined, $separator);
+    $autochomp = 1;    # default
+
+    ################################################################
+    # Backwards-compatibility block.
+    # THIS WILL GO AWAY!
+    #
+    # This parses the old 'chomp' and 'nochomp' and 'sep' arguments.
+    if (@_)
     {
-        Iterator::X::Parameter_Error->throw(q{Invalid "chomp" argument to ifile_reverse})
-            if ($autochomp ne 'chomp'  &&  $autochomp ne 'nochomp');
+        if ($_[0] eq 'chomp'  ||  $_[0] eq 'nochomp'  ||  !defined($_[0]))
+        {
+            my $chomp_opt = shift;
+            if (defined $chomp_opt)
+            {
+                Iterator::X::Parameter_Error->throw(q{Invalid "chomp" argument to ifile})
+                    if ($chomp_opt ne 'chomp'  &&  $chomp_opt ne 'nochomp');
+
+                $autochomp = $chomp_opt eq 'chomp';
+            }
+
+            # Separator argument
+            if (@_)
+            {
+                $sep_defined = 1;
+                $separator   = shift;
+            }
+        }
     }
-    else
+    ################################################################
+
+    if (@_)
     {
-        $autochomp = 'chomp';    # default
+        Iterator::X::Parameter_Error->throw
+            (q{Second argument to ifile_reverse must be a hashref})
+            if ref $_[0] ne 'HASH';
+
+        Option: while (my ($opt,$val) = each %{$_[0]})
+        {
+            my $lcopt = lc $opt;   # because we're friendly.
+
+            if ($lcopt eq 'chomp')
+            {
+                $autochomp = $val;
+                next Option;
+            }
+            if ($lcopt eq 'rs'  ||  $lcopt eq '$/'  ||  $lcopt eq 'input_record_separator')
+            {
+                $separator   = $val;
+                $sep_defined = 1;
+                next Option;
+            }
+            Iterator::X::OptionError->throw
+                (message => qq{Unknown option: "$opt" in call to ifile},
+                 name    => $opt);
+        }
     }
 
     # Must read chunks of the end of the file into memory
-    my $block_size   = shift || 8192;
+    my $block_size   = 8192;   # somewhat arbitrary
 
-    my $fh = new IO::File $filename;
-    Iterator::X::IO_Error (message => qq{Cannot read "$filename": $!},
-                           error => $!)
-        unless $fh;
+    my $fh = IO::File->new ($filename)
+        or Iterator::X::IO_Error (message => qq{Cannot read "$filename": $!},
+                                  error => $!);
 
     # Buffer variables
     my $leftover;
@@ -213,6 +308,9 @@ sub ifile_reverse
     {
         my $block = shift;
         $block .= $leftover if defined $leftover;
+
+        # Split up the block
+        my $sep = $sep_defined? $separator : $/;
         @lines = reverse split /(?<=\Q$sep\E)/, $block;
         $leftover = pop @lines;
     };
@@ -269,7 +367,8 @@ sub ifile_reverse
         Iterator::is_done()
             if ! defined $line;
 
-        $line =~ s/\Q$sep\E$//  if $autochomp eq 'chomp';
+        my $sep = $sep_defined? $separator : $/;
+        $line =~ s/\Q$sep\E$//  if $autochomp;
         return $line;
     });
 }
@@ -290,10 +389,10 @@ __END__
  $iter = idir_walk ($path);
 
  # Return the lines of a file, one at a time.
- $iter = ifile ($filename, [$chomp], [$sep]);
+ $iter = ifile ($filename, \%options);
 
  # Return the lines of a file, in reverse order
- $iter = ifile_reverse ($filename, [$chomp], [$sep]);
+ $iter = ifile_reverse ($filename, \%options);
 
 =head1 DESCRIPTION
 
@@ -322,38 +421,69 @@ To return only certain files, combine this with an igrep:
  $iter = igrep {-s && -M < 1} idir "/some/path";
 
 (Returns non-empty files modified less than a day ago).
+(L<igrep|Iterator::Util/igrep>) is defined in the L<Iterator::Util>
+module).
 
 =item idir_walk
 
  $iter = idir_walk ($path);
 
-Returns the files in a directory tree, one by one.  Sort of like
+Returns the files in a directory tree, one by one.  It's sort of like
 L<File::Find> in slow motion.
 
 Requires L<IO::Dir> and L<Cwd>.
 
 =item ifile
 
- $iter = ifile ($filename, [$chomp], [$sep]);
+ $iter = ifile ($filename, \%options);
 
 Opens a file, generates an iterator to return the lines of the file.
 
-If C<$chomp> is passed, it should be 'C<chomp>' or 'C<nochomp>', to
-indicate whether lines should be chomped on input.  The default (if
-C<$chomp> is undefined) is 'C<chomp>'.
+C<\%options> is a reference to a hash of options.  Currently, two
+options are supported:
 
-C<$sep>, if passed, is the record separator.
+=over 2
 
-Requires L<IO::File>.
+=item chomp
+
+C<chomp =E<gt> boolean> indicates whether lines should be C<chomp>ed
+before being returned by the iterator.  The default is true.
+
+=item $/
+
+C<'$/' =E<gt> value> specifies what string to use as the record
+separator.  If not specified, the current value of C<$/> is used.
+
+"C<rs>" or "C<input_record_separator>" may be used as option names
+instead of "C<$/>", if you find that to be more readable.  See
+the L<English> module.
+
+=back
+
+Option names are case-insensitive.
+
+C<ifile> requires L<IO::File>.
 
 =item ifile_reverse
 
- $iter = ifile_reverse ($filename, [$chomp], [$sep]);
+ $iter = ifile_reverse ($filename, \%options);
 
 Exactly the same as L</ifile>, but reads the lines of the file
 backwards.
 
+The C<input_record_separator> option values C<undef> (slurp whole
+file) and scalar references (fixed-length records) are not currently
+supported.
+
 =back
+
+=head1 INTERFACE CHANGE
+
+In version 0.01 of Iterator::IO, the L</ifile> and L<ifile_reverse>
+functions accepted their options in a different manner.  This has now
+changed to operate via a hash reference of options.  The old way will
+still work, but is deprecated and I<will> be removed in a future
+release.
 
 =head1 EXPORTS
 
@@ -362,13 +492,13 @@ default.
 
 =head1 DIAGNOSTICS
 
-Iterator uses L<Exception::Class> objects for throwing exceptions.
+Iterator::IO uses L<Exception::Class> objects for throwing exceptions.
 If you're not familiar with Exception::Class, don't worry; these
 exception objects work just like C<$@> does with C<die> and C<croak>,
 but they are easier to work with if you are trapping errors.
 
-See the L<Iterator> module documentation for more information on
-how to trap and handle these exception objects.
+See the L<Iterator|Iterator/DIAGNOSTICS> module documentation for more
+information on how to trap and handle these exception objects.
 
 =over 4
 
@@ -430,7 +560,7 @@ L<IO::File> is required if you use L</ifile> or L</ifile_reverse>
 
 I<Higher Order Perl>, Mark Jason Dominus, Morgan Kauffman 2005.
 
- L<http://perl.plover.com/hop/>
+L<http://perl.plover.com/hop/>
 
 =head1 THANKS
 
@@ -449,10 +579,6 @@ To avoid my spam filter, please include "Perl", "module", or this
 module's name in the message's subject line, and/or GPG-sign your
 message.
 
-If you have suggestions for improvement, please drop me a line.  If
-you make improvements to this software, I ask that you please send me
-a copy of your changes. Thanks.
-
 =cut
 
 =begin gpg
@@ -460,9 +586,9 @@ a copy of your changes. Thanks.
 -----BEGIN PGP SIGNATURE-----
 Version: GnuPG v1.4.1 (Cygwin)
 
-iD8DBQFDBLe6Y96i4h5M0egRAk6eAJ0WBu+YzpZ40eFuSYoe9qILUBJqvwCg8N02
-Oz+0mrQW0RyT8RsKfBdwkko=
-=46bP
+iD8DBQFDC5SrY96i4h5M0egRAnaKAJ9VJIIEh1DqBRhw0wyk4ceczcRw0ACg9QOs
+6bT8QG6x/dRiXj17nuiyWmk=
+=VvwS
 -----END PGP SIGNATURE-----
 
 =end gpg
